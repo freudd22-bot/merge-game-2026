@@ -6,10 +6,10 @@
 <title>لعبة دمج الفواكه 6x6 + DA</title>
 <style>
 body{font-family:Tahoma,Arial,sans-serif;background:linear-gradient(135deg,#f5f7fa,#c3cfe2);margin:0;padding:15px;text-align:center;}
-#startBtn,#googleLogin,#buyGemsBtn{padding:15px 30px;font-size:20px;border:none;border-radius:10px;cursor:pointer;margin:10px}
+#startBtn,#loginBtn,#buyGems{padding:15px 30px;font-size:20px;border:none;border-radius:10px;cursor:pointer;margin:10px}
 #startBtn{background:#4CAF50;color:#fff}
-#googleLogin{background:#4285F4;color:#fff}
-#buyGemsBtn{background:#FFA500;color:#fff}
+#loginBtn{background:#4285F4;color:#fff}
+#buyGems{background:#FF9800;color:#fff}
 #top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap}
 #targetBox{font-size:24px;font-weight:bold}
 #game{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;max-width:360px;width:90%;margin:15px auto}
@@ -20,101 +20,86 @@ body{font-family:Tahoma,Arial,sans-serif;background:linear-gradient(135deg,#f5f7
 <body>
 
 <div id="userStatus">👤 أنت كزائر</div>
-<button id="googleLogin">تسجيل تجريبي</button>
+<button id="loginBtn">تسجيل/تجربة</button>
 <button id="startBtn">▶️ ابدأ اللعبة</button>
-<button id="buyGemsBtn">💎 شراء الجواهر</button>
-
-<div>DA: <span id="da">0</span> | الجواهر: <span id="score">0</span></div>
+<button id="buyGems" style="display:none;">💎 شراء جوهرة</button>
 
 <div id="gameContainer" style="display:none;">
   <div id="top">
     <div id="targetBox">🎯 الهدف: <span id="target"></span></div>
+    <div>⭐ نقاط: <span id="score">0</span></div>
+    <div>DA: <span id="da">0</span></div>
+    <div>💎 الجواهر: <span id="gems">0</span></div>
   </div>
+
   <div id="game"></div>
+
   <div id="activeUsers">
     🟢 المستخدمون النشطون:
     <ul id="activeList"></ul>
   </div>
 </div>
 
-<audio id="sound">
-  <source src="https://cdn.pixabay.com/audio/2022/03/15/audio_5c4f1d6d7a.mp3">
-</audio>
-
-<!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-
 <script>
-const firebaseConfig = {
-  apiKey: "AIzaSyBbdPvahZv6OSBumuFBd37mC61UXlsIm6k",
-  authDomain: "naturebelkhirapp.firebaseapp.com",
-  databaseURL: "https://naturebelkhirapp-default-rtdb.firebaseio.com",
-  projectId: "naturebelkhirapp",
-  storageBucket: "naturebelkhirapp.appspot.com",
-  messagingSenderId: "318524052243",
-  appId: "1:318524052243:web:5e14d79b0fa1eeef0280e6"
-};
-firebase.initializeApp(firebaseConfig);
-
 const fruits=["🍎","🍌","🍊","🍓","🍐","🍅"];
 const size=6;
 let grid=[],selected=null;
-let score=0,da=0,targetFruit="";
+let score=0,da=0,gems=0,targetFruit="";
 let user=null;
 
 const game=document.getElementById("game");
 const targetEl=document.getElementById("target");
 const scoreEl=document.getElementById("score");
 const daEl=document.getElementById("da");
+const gemsEl=document.getElementById("gems");
 const activeList=document.getElementById("activeList");
 
-/* ===== Google Login ===== */
-document.getElementById("googleLogin").onclick=async()=>{
-  const provider=new firebase.auth.GoogleAuthProvider();
-  const res=await firebase.auth().signInWithPopup(provider);
-  user=res.user;
-  document.getElementById("userStatus").textContent="👤 "+user.displayName;
-  document.getElementById("googleLogin").style.display="none";
-  loadGame();
-  updateActiveUsers();
+// تسجيل/تجربة مستخدم
+document.getElementById("loginBtn").onclick=async()=>{
+    let email = prompt("أدخل بريدك للتسجيل (يمكن تركه فارغًا للزائر)");
+    let guestId = !email ? "guest_"+Date.now() : null;
+    const res = await fetch("https://merge-game-2026-production-a52b.up.railway.app/api/login",{
+        method:"POST", headers:{'Content-Type':'application/json'}, body:JSON.stringify({email, guestId})
+    });
+    user = await res.json();
+    score=user.points; da=user.da; gems=user.gems;
+    document.getElementById("userStatus").textContent = email ? "👤 "+email : "👤 زائر";
+    document.getElementById("loginBtn").style.display="none";
+    document.getElementById("buyGems").style.display=email ? "inline-block" : "none";
+    renderStats();
+    loadGame();
 };
 
-/* ===== Start Game ===== */
+// بدء اللعبة
 document.getElementById("startBtn").onclick=()=>{
-  document.getElementById("startBtn").style.display="none";
-  document.getElementById("gameContainer").style.display="block";
-  if(grid.length===0) initGrid();
-  nextTarget();
-  renderGrid();
+    document.getElementById("startBtn").style.display="none";
+    document.getElementById("gameContainer").style.display="block";
+    if(grid.length===0) initGrid();
+    nextTarget();
+    renderGrid();
 };
 
-/* ===== Buy Gems ===== */
-document.getElementById("buyGemsBtn").onclick = async ()=>{
-    if(!user) return alert("سجل أولاً للشراء");
-    let gemsToBuy = prompt("أدخل عدد الجواهر التي تريد شرائها:");
-    if(!gemsToBuy) return;
-    gemsToBuy = Number(gemsToBuy);
-    if(isNaN(gemsToBuy) || gemsToBuy<=0) return alert("أدخل رقم صحيح");
-
-    const paymentInfo = {}; // ضع معلومات الدفع الحقيقية هنا
-
-    const res = await fetch("/api/buy", {
+// شراء الجواهر
+document.getElementById("buyGems").onclick=async()=>{
+    let amount = parseInt(prompt("كم عدد الجواهر التي تريد شرائها؟"));
+    if(!amount || amount<1) return;
+    const res = await fetch("https://merge-game-2026-production-a52b.up.railway.app/api/charge",{
         method:"POST",
-        headers: { "Content-Type":"application/json" },
-        body: JSON.stringify({ id:user.uid, gemsToBuy, paymentInfo })
+        headers:{'Content-Type':'application/json','x-api-key':'MERGE_GAME_2026_SECRET_KEY'},
+        body:JSON.stringify({id:user.id,gems:amount})
     });
     const data = await res.json();
-    if(res.ok){
-        alert(data.message);
-        loadGame();
-    } else {
-        alert("فشل الشراء: "+data.error);
-    }
-};
+    gems=data.balance;
+    renderStats();
+    alert(`تمت إضافة ${amount} جوهرة!`);
+});
 
-/* ===== Game Logic ===== */
+function renderStats(){
+    scoreEl.textContent=score;
+    daEl.textContent=da;
+    gemsEl.textContent=gems;
+}
+
 function initGrid(){
   grid=[];
   for(let r=0;r<size;r++){
@@ -159,9 +144,9 @@ function checkRows(){
   for(let r=0;r<size;r++){
     if(grid[r].every(f=>f===targetFruit)){
       grid[r]=grid[r].map(()=>randomFruit());
-      daEl.textContent=da;
-      scoreEl.textContent=score;
-      document.getElementById("sound").play();
+      score+=10;
+      if(score>=1000){ da+=10; score=score%1000; }
+      renderStats();
       nextTarget();
       break;
     }
@@ -170,48 +155,20 @@ function checkRows(){
 
 function nextTarget(){
   let t;
-  do{ t=fruits[Math.floor(Math.random()*fruits.length)]; }
-  while(t===targetFruit);
+  do{ t=fruits[Math.floor(Math.random()*fruits.length)]; }while(t===targetFruit);
   targetFruit=t;
   targetEl.textContent=t;
 }
 
-/* ===== Firebase Save / Load ===== */
 function saveGame(){
-  if(!user) return;
-  firebase.database().ref("games/"+user.uid).set({
-    name:user.displayName,
-    grid,score,da,targetFruit,
-    lastActive:Date.now()
-  });
+    if(!user) return;
+    localStorage.setItem(user.id, JSON.stringify({grid,score,da,gems,targetFruit}));
 }
 
 function loadGame(){
-  if(!user) return;
-  firebase.database().ref("games/"+user.uid).once("value",snap=>{
-    if(!snap.exists()) return;
-    const d=snap.val();
-    grid=d.grid||[];
-    score=d.score||0;
-    da=d.da||0;
-    targetFruit=d.targetFruit||"";
-    scoreEl.textContent=score;
-    daEl.textContent=da;
-    renderGrid();
-  });
-}
-
-/* ===== Active Users ===== */
-function updateActiveUsers(){
-  firebase.database().ref("games")
-    .orderByChild("lastActive")
-    .startAt(Date.now()-300000)
-    .on("value",snap=>{
-      activeList.innerHTML="";
-      snap.forEach(s=>{
-        activeList.innerHTML+=`<li>${s.val().name} - نقاط: ${s.val().score}</li>`;
-      });
-    });
+    if(!user) return;
+    const data = JSON.parse(localStorage.getItem(user.id) || "{}");
+    if(data.grid) { grid=data.grid; score=data.score; da=data.da; gems=data.gems; targetFruit=data.targetFruit; renderStats(); renderGrid(); }
 }
 </script>
 </body>
