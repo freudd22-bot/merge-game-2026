@@ -3,99 +3,216 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>لعبة الدمج الاحترافية - Merge Game Pro</title>
+<title>لعبة دمج الفواكه 6x6 + DA</title>
 <style>
-    body { font-family: Arial, sans-serif; background:#f0f8ff; text-align:center; margin:0; padding:0; }
-    #game { margin:20px auto; max-width:500px; }
-    .button { padding:10px 20px; margin:5px; cursor:pointer; }
-    .merge-btn { background:#4CAF50; color:white; border:none; }
-    #status { margin-top:10px; font-weight:bold; }
-    input { padding:8px; margin:5px; width:80%; font-size:16px; }
+body{font-family:Tahoma,Arial,sans-serif;background:linear-gradient(135deg,#f5f7fa,#c3cfe2);margin:0;padding:15px;text-align:center;}
+#startBtn,#googleLogin,#buyGemsBtn{padding:15px 30px;font-size:20px;border:none;border-radius:10px;cursor:pointer;margin:10px}
+#startBtn{background:#4CAF50;color:#fff}
+#googleLogin{background:#4285F4;color:#fff}
+#buyGemsBtn{background:#FFA500;color:#fff}
+#top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+#targetBox{font-size:24px;font-weight:bold}
+#game{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;max-width:360px;width:90%;margin:15px auto}
+.cell{background:#fff;border-radius:10px;height:50px;display:flex;justify-content:center;align-items:center;font-size:26px;cursor:pointer}
+#activeUsers{max-width:360px;margin:15px auto;text-align:left;font-weight:bold}
 </style>
 </head>
 <body>
 
-<h1>لعبة الدمج الاحترافية - Merge Game Pro</h1>
+<div id="userStatus">👤 أنت كزائر</div>
+<button id="googleLogin">تسجيل تجريبي</button>
+<button id="startBtn">▶️ ابدأ اللعبة</button>
+<button id="buyGemsBtn">💎 شراء الجواهر</button>
 
-<div id="login">
-    <h3>تسجيل الدخول أو الدخول كزائر</h3>
-    <input type="email" id="email" placeholder="البريد الإلكتروني">
-    <input type="text" id="guest" placeholder="أدخل معرف الزائر">
-    <button class="button" onclick="login()">دخول</button>
+<div>DA: <span id="da">0</span> | الجواهر: <span id="score">0</span></div>
+
+<div id="gameContainer" style="display:none;">
+  <div id="top">
+    <div id="targetBox">🎯 الهدف: <span id="target"></span></div>
+  </div>
+  <div id="game"></div>
+  <div id="activeUsers">
+    🟢 المستخدمون النشطون:
+    <ul id="activeList"></ul>
+  </div>
 </div>
 
-<div id="game" style="display:none;">
-    <h3>مرحباً، <span id="userId"></span></h3>
-    <p>الجواهر: <span id="gems"></span> | النقاط: <span id="points"></span> | DA: <span id="da"></span></p>
+<audio id="sound">
+  <source src="https://cdn.pixabay.com/audio/2022/03/15/audio_5c4f1d6d7a.mp3">
+</audio>
 
-    <h4>اختر عنصرين للدمج</h4>
-    <button class="button merge-btn" onclick="merge(1,1)">🍎</button>
-    <button class="button merge-btn" onclick="merge(2,2)">🍌</button>
-    <button class="button merge-btn" onclick="merge(3,3)">🍇</button>
-    <button class="button merge-btn" onclick="merge(4,4)">🥦</button>
-    <button class="button merge-btn" onclick="merge(1,4)">🍎+🥦</button>
-
-    <div id="status"></div>
-    <button class="button" onclick="charge()">شراء جواهر</button>
-</div>
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <script>
-let currentUser = null;
+const firebaseConfig = {
+  apiKey: "AIzaSyBbdPvahZv6OSBumuFBd37mC61UXlsIm6k",
+  authDomain: "naturebelkhirapp.firebaseapp.com",
+  databaseURL: "https://naturebelkhirapp-default-rtdb.firebaseio.com",
+  projectId: "naturebelkhirapp",
+  storageBucket: "naturebelkhirapp.appspot.com",
+  messagingSenderId: "318524052243",
+  appId: "1:318524052243:web:5e14d79b0fa1eeef0280e6"
+};
+firebase.initializeApp(firebaseConfig);
 
-function login(){
-    const email = document.getElementById('email').value;
-    const guest = document.getElementById('guest').value;
-    fetch('https://merge-game.onrender.com/api/login', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ email, guestId: guest })
-    })
-    .then(r=>r.json())
-    .then(data=>{
-        currentUser = data.id;
-        document.getElementById('userId').innerText = currentUser;
-        document.getElementById('gems').innerText = data.gems;
-        document.getElementById('points').innerText = data.points;
-        document.getElementById('da').innerText = data.da;
-        document.getElementById('login').style.display='none';
-        document.getElementById('game').style.display='block';
+const fruits=["🍎","🍌","🍊","🍓","🍐","🍅"];
+const size=6;
+let grid=[],selected=null;
+let score=0,da=0,targetFruit="";
+let user=null;
+
+const game=document.getElementById("game");
+const targetEl=document.getElementById("target");
+const scoreEl=document.getElementById("score");
+const daEl=document.getElementById("da");
+const activeList=document.getElementById("activeList");
+
+/* ===== Google Login ===== */
+document.getElementById("googleLogin").onclick=async()=>{
+  const provider=new firebase.auth.GoogleAuthProvider();
+  const res=await firebase.auth().signInWithPopup(provider);
+  user=res.user;
+  document.getElementById("userStatus").textContent="👤 "+user.displayName;
+  document.getElementById("googleLogin").style.display="none";
+  loadGame();
+  updateActiveUsers();
+};
+
+/* ===== Start Game ===== */
+document.getElementById("startBtn").onclick=()=>{
+  document.getElementById("startBtn").style.display="none";
+  document.getElementById("gameContainer").style.display="block";
+  if(grid.length===0) initGrid();
+  nextTarget();
+  renderGrid();
+};
+
+/* ===== Buy Gems ===== */
+document.getElementById("buyGemsBtn").onclick = async ()=>{
+    if(!user) return alert("سجل أولاً للشراء");
+    let gemsToBuy = prompt("أدخل عدد الجواهر التي تريد شرائها:");
+    if(!gemsToBuy) return;
+    gemsToBuy = Number(gemsToBuy);
+    if(isNaN(gemsToBuy) || gemsToBuy<=0) return alert("أدخل رقم صحيح");
+
+    const paymentInfo = {}; // ضع معلومات الدفع الحقيقية هنا
+
+    const res = await fetch("/api/buy", {
+        method:"POST",
+        headers: { "Content-Type":"application/json" },
+        body: JSON.stringify({ id:user.uid, gemsToBuy, paymentInfo })
     });
+    const data = await res.json();
+    if(res.ok){
+        alert(data.message);
+        loadGame();
+    } else {
+        alert("فشل الشراء: "+data.error);
+    }
+};
+
+/* ===== Game Logic ===== */
+function initGrid(){
+  grid=[];
+  for(let r=0;r<size;r++){
+    let row=[];
+    for(let c=0;c<size;c++) row.push(randomFruit());
+    grid.push(row);
+  }
 }
 
-function merge(el1, el2){
-    if(!currentUser) return alert('سجل الدخول أولاً');
-    fetch('https://merge-game.onrender.com/api/merge',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ id:currentUser, el1, el2 })
-    })
-    .then(r=>r.json())
-    .then(data=>{
-        document.getElementById('status').innerText = data.message;
-        document.getElementById('gems').innerText = data.gems;
-        document.getElementById('points').innerText = data.points;
-        document.getElementById('da').innerText = data.da;
-    });
+function randomFruit(){
+  if(targetFruit && Math.random()<0.25) return targetFruit;
+  return fruits[Math.floor(Math.random()*fruits.length)];
 }
 
-function charge(){
-    const gems = prompt("كم عدد الجواهر التي تريد شحنها؟");
-    if(!gems) return;
-    fetch('https://merge-game.onrender.com/api/charge',{
-        method:'POST',
-        headers:{
-            'Content-Type':'application/json',
-            'x-api-key':'MERGE_GAME_2026_SECRET_KEY'
-        },
-        body: JSON.stringify({ id:currentUser, gems })
-    })
-    .then(r=>r.json())
-    .then(data=>{
-        alert(data.message + ". الرصيد الجديد: " + data.balance);
-        document.getElementById('gems').innerText = data.balance;
+function renderGrid(){
+  game.innerHTML="";
+  for(let r=0;r<size;r++){
+    for(let c=0;c<size;c++){
+      const cell=document.createElement("div");
+      cell.className="cell";
+      cell.textContent=grid[r][c];
+      cell.onclick=()=>selectCell(r,c);
+      game.appendChild(cell);
+    }
+  }
+}
+
+function selectCell(r,c){
+  if(!selected){ selected=[r,c]; return; }
+  const [sr,sc]=selected;
+  if(grid[sr][sc]===grid[r][c] && !(sr===r&&sc===c)){
+    grid[sr][sc]=randomFruit();
+    grid[r][c]=randomFruit();
+    checkRows();
+  }
+  selected=null;
+  renderGrid();
+  saveGame();
+}
+
+function checkRows(){
+  for(let r=0;r<size;r++){
+    if(grid[r].every(f=>f===targetFruit)){
+      grid[r]=grid[r].map(()=>randomFruit());
+      daEl.textContent=da;
+      scoreEl.textContent=score;
+      document.getElementById("sound").play();
+      nextTarget();
+      break;
+    }
+  }
+}
+
+function nextTarget(){
+  let t;
+  do{ t=fruits[Math.floor(Math.random()*fruits.length)]; }
+  while(t===targetFruit);
+  targetFruit=t;
+  targetEl.textContent=t;
+}
+
+/* ===== Firebase Save / Load ===== */
+function saveGame(){
+  if(!user) return;
+  firebase.database().ref("games/"+user.uid).set({
+    name:user.displayName,
+    grid,score,da,targetFruit,
+    lastActive:Date.now()
+  });
+}
+
+function loadGame(){
+  if(!user) return;
+  firebase.database().ref("games/"+user.uid).once("value",snap=>{
+    if(!snap.exists()) return;
+    const d=snap.val();
+    grid=d.grid||[];
+    score=d.score||0;
+    da=d.da||0;
+    targetFruit=d.targetFruit||"";
+    scoreEl.textContent=score;
+    daEl.textContent=da;
+    renderGrid();
+  });
+}
+
+/* ===== Active Users ===== */
+function updateActiveUsers(){
+  firebase.database().ref("games")
+    .orderByChild("lastActive")
+    .startAt(Date.now()-300000)
+    .on("value",snap=>{
+      activeList.innerHTML="";
+      snap.forEach(s=>{
+        activeList.innerHTML+=`<li>${s.val().name} - نقاط: ${s.val().score}</li>`;
+      });
     });
 }
 </script>
-
 </body>
 </html>

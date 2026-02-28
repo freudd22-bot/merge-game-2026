@@ -1,19 +1,13 @@
 {
-  "name": "merge-game",
+  "name": "merge-game-2026",
   "version": "1.0.0",
-  "description": "لعبة الدمج الاحترافية مع شحن الجواهر",
+  "description": "لعبة دمج الفواكه مع DA وجواهر",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "cors": "^2.8.5",
     "express": "^4.18.2",
-    "fs": "0.0.1-security"
-  },
-  "engines": {
-    "node": ">=18.0.0"
-  },
-  "author": "Freudd",
-  "license": "MIT"
+    "cors": "^2.8.5"
+  }
 }
