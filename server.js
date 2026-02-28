@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
+const path = require('path');
 
 const app = express();
 app.use(cors());
@@ -10,7 +11,7 @@ app.use(express.json());
 const DB_FILE = "database.json";
 
 // استخدام Environment Variables لحماية المعلومات الحساسة
-// ضع هذه المتغيرات في Render أو أي سيرفر يدعم Environment Variables:
+// ضع هذه المتغيرات في Railway أو أي سيرفر يدعم Environment Variables:
 // API_KEY = "MERGE_GAME_2026_SECRET_KEY"
 // CCP_NUMBER = "00799999000887214877"
 // PHONE_NUMBER = "0673121885"
@@ -29,6 +30,16 @@ function readDB() {
 function writeDB(data) {
     fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 }
+
+// -------------------------------------
+// عرض الملفات الثابتة (HTML, CSS, JS)
+app.use(express.static(path.join(__dirname)));
+
+// إعادة توجيه "/" إلى index.html
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'merge-game.html'));
+});
+// -------------------------------------
 
 // تسجيل أو تحديث مستخدم
 app.post("/api/login", (req,res)=>{
@@ -102,4 +113,6 @@ app.get("/api/balance/:id",(req,res)=>{
     res.json(db.users[id]);
 });
 
-app.listen(3000, ()=>console.log("Server running on http://localhost:3000"));
+// استخدام Port من Railway أو Port 3000 محليًا
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, ()=>console.log(`Server running on port ${PORT}`));
